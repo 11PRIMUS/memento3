@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 class Settings(BaseSettings):
     #app settings
@@ -10,11 +10,17 @@ class Settings(BaseSettings):
     #server
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+
+    #supabase
+    SUPABASE_URL: str 
+    SUPABASE_KEY: str 
+    
     
     #CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
     
     class Config:
         env_file = ".env"
+        case_senstive =True
 
 settings = Settings()
