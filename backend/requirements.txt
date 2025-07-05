@@ -6,4 +6,4 @@ pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
 supabase==2.3.4
-postgrest==0.13.2
+structlog==23.2.0

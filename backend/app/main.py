@@ -2,8 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.supabase import SupabaseClient
+from app.core.logging import setup_logging, get_logger
 from contextlib import asynccontextmanager
 import uvicorn
+
+setup_logging()
+logger=get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
