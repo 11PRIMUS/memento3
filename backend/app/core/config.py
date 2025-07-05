@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import List, Optional
+import os
 
 class Settings(BaseSettings):
     #app settings
@@ -14,6 +15,10 @@ class Settings(BaseSettings):
     #supabase
     SUPABASE_URL: str 
     SUPABASE_KEY: str 
+
+    #github api's
+    GITHUB_TOKEN:Optional[str] =None
+    GITHUB_API_KEY :str
     
     
     #CORS
