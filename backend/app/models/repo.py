@@ -4,10 +4,10 @@ from datetime import datetime
 from enum import Enum
 
 class RepoStatus(str, Enum):
-    ACTIVE="active"
-    ANALYZING="analyzing"
-    ARCHIVED="archived"
-    ERROR="error"
+    PENDING= "pending"
+    INDEXING= "indexing"
+    COMPLETED= "completed"
+    ERROR= "error"
 
 class Repo(BaseModel):
     """repo model"""
@@ -20,7 +20,10 @@ class Repo(BaseModel):
     owner:Optional[str] =None
     stars: int=0
     forks: int=0
-    status: RepoStatus = RepoStatus.ACTIVE
+    status: RepoStatus = RepoStatus.PENDING
+    total_commits: int=0
+    indexed_commits: int=0
+    last_analyzed_at: Optional[datetime] =None
 
     #timestamp
     created_at: Optional[datetime] = None
@@ -36,3 +39,6 @@ class Repo(BaseModel):
     
     class Config:
         use_enum_values =True
+        json_encoders={
+            datetime: lambda v:v.isoformat() if v else None
+        }
