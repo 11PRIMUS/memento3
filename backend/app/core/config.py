@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     GITHUB_TOKEN:Optional[str] =None
     GITHUB_API_KEY :str
     
+    #embedding model
+    EMBEDDING_MODEL: str ="sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_DIMENSION: int=384
     
     #CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
