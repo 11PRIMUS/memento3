@@ -7,3 +7,4 @@ python-dotenv==1.0.0
 
 supabase==2.3.4
 structlog==23.2.0
+httpx==0.25.2
