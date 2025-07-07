@@ -58,6 +58,27 @@ class SupabaseService:
         except Exception as e:
             logger.error("Error fetching repository", repo_id=repo_id, error=str(e))
             return None
+        
+    async def update_repoStatus(self, repo_id:int, status: RepoStatus, **kwargs)-> bool:
+        try:
+            update_data = {
+                "status": status.value,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                **kwargs
+            }
+            
+            response = self.client.table('repositories').update(update_data).eq('id', repo_id).execute()
+            
+            if response.data:
+                logger.info("repository status updated", repo_id=repo_id, status=status.value)
+                return True
+            return False
+            
+        except Exception as e:
+            logger.error("error updating repository", repo_id=repo_id, error=str(e))
+            return False
+        
+    
     
 
 
