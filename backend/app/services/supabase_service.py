@@ -132,6 +132,49 @@ class SupabaseService:
         except Exception as e:
             logger.error("Error fetching commits", repo_id=repo_id, error=str(e))
             return []
+        
+    async def get_commit_by_sha(self, repo_id: int, sha: str) -> Optional[Commit]:
+        #get commit by sha
+        try:
+            response = (
+                self.client.table('commits')
+                .select('*')
+                .eq('repository_id', repo_id)
+                .eq('sha', sha)
+                .execute()
+            )
+            
+            if response.data:
+                return Commit(**response.data[0])
+            return None
+            
+        except Exception as e:
+            logger.error("error fetching commit by SHA", repo_id=repo_id, sha=sha[:8], error=str(e))
+            return None
+        
+    async def store_embedding(self, embedding: Embeddings) -> Embeddings:
+        """Store embedding vector"""
+        try:
+            embedding_data = {
+                "commit_id": embedding.commit_id,
+                "embedding_vector": embedding.embedding_vector,
+                "model_name": embedding.model_name,
+                "text_content": embedding.text_content,
+                "embedding_type": embedding.embedding_type,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            response = self.client.table('embeddings').insert(embedding_data).execute()
+            
+            if response.data:
+                logger.debug("embedding stored", commit_id=embedding.commit_id)
+                return Embeddings(**response.data[0])
+            else:
+                raise Exception("failed to store embedding")
+                
+        except Exception as e:
+            logger.error("Error storing embedding", commit_id=embedding.commit_id, error=str(e))
+            raise
     
     
 
