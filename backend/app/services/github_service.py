@@ -120,3 +120,33 @@ class Github_service:
         
         logger.info("commit fetch completed", owner=owner, repo=repo, total_commits=len(commits))
         return commits
+    
+    async def get_commitDetails(self, client:httpx.AsyncClient, owner: str, repo: str, sha: str)-> Optional[Commit]:
+        #detailed commit information
+        try:
+            response = await client.get(
+                f"{self.base_url}/repos/{owner}/{repo}/commits/{sha}",
+                headers= self.headers
+            )
+            if response.status_code!= 200:
+                logger.warnig("failed to fetch commit details", sha= sha[:8])
+                return None
+            
+            data = response.json()
+
+            return Commit(
+                sha =sha,
+                message=data["commit"]["message"],
+                author =data["commit"]["author"]["name"],
+                author_email =data["commit"]["author"]["email"],
+                commit_date =datetime.fromisoformat(
+                    data["commit"]["author"]["date"].replace("Z", "+00:00") 
+                ),
+                additions=data["stats"]["additions"]
+                deletions=data["stats"]["deletions"]
+                files_changed=[file["filename"] for file in data.get("files", [])]
+
+            )
+        except Exception as e:
+            logger.error("error processing commit", sha= sha[:8], error=str(e))
+            return None
