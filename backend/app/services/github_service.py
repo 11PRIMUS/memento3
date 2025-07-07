@@ -25,7 +25,7 @@ class Github_service:
     
     def github_url(self, url: str)-> Tuple[str,str]:
         parsed =urlparse(str(url))
-        if parsed.netloc not in ["github.com", "www.github.com"];
+        if parsed.netloc not in ["github.com", "www.github.com"]:
             raise ValueError("invalid github url")
         
         path_parts =parsed.path.strip('/').split('/')
@@ -44,8 +44,8 @@ class Github_service:
 
         logger.info("fetching repository ifo", owner= owner, repo= repo)
 
-        async with httpx.AsyncClient(timeout=30.0) as Client:
-            response= await Client.get(
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response= await client.get(
                 f"{self.base_url}/repos/{owner}/{repo}",
                 headers = self.headers
             )
@@ -72,4 +72,51 @@ class Github_service:
                 "language": data.get("language"),
                 "is_private": data.get("private", False)
             }
+    
+    async def get_commits(self, repo_url: str, max_commits: int =100)-> List[Commit]:
+        #fetch commit history from github
+        owner, repo =self.github_url(repo_url)
+
+        logger.info("starting commit fetch", owner=owner, repo= repo, max_commits= max_commits)
+
+        commits=[]
+        page=1
+        per_page=min(100, max_commits)
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            while len(commits) < max_commits:
+                logger.debug("fetching commit page", page=page, current_count= len(commits))
+                response = await client.get(
+                    f"{self.base_url}/repos/{owner}/{repo}/commits",
+                    headers= self.headers,
+                    params={
+                        "per_page":per_page,
+                        "page":page
+                    }
+                )
+
+                if response.status_code != 200:
+                    logger.error("failed to fetch commit page", page=page, status_code= response.status_code)
+                    break
+
+                page_commits = response.json()
+                if not page_commits:
+                    logger.info("No more commits found", page=page)
+                    break
+                
+                #process commits from this page
+                for commit_data in page_commits:
+                    if len(commits) >= max_commits:
+                        break
+                    
+                    commit_detail = await self._get_commit_details(client, owner, repo, commit_data["sha"])
+                    if commit_detail:
+                        commits.append(commit_detail)
+                
+                page += 1
+                
+                if len(page_commits) < per_page:
+                    break
         
+        logger.info("commit fetch completed", owner=owner, repo=repo, total_commits=len(commits))
+        return commits
