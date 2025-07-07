@@ -153,7 +153,7 @@ class SupabaseService:
             return None
         
     async def store_embedding(self, embedding: Embeddings) -> Embeddings:
-        """Store embedding vector"""
+        #store embeddings
         try:
             embedding_data = {
                 "commit_id": embedding.commit_id,
@@ -175,6 +175,57 @@ class SupabaseService:
         except Exception as e:
             logger.error("Error storing embedding", commit_id=embedding.commit_id, error=str(e))
             raise
+
+    async def search_similarCommits(self, query_embedding: List[float], repo_id: int, 
+                                   limit: int = 10, threshold: float = 0.7) -> List[Dict]:
+        #search for similar commits using vector 
+        try:
+            #supabase vector search function
+            response = self.client.rpc('search_similar_commits', {
+                'query_embedding': query_embedding,
+                'repo_id': repo_id,
+                'match_threshold': threshold,
+                'match_count': limit
+            }).execute()
+            
+            return response.data if response.data else []
+            
+        except Exception as e:
+            logger.error("Error searching similar commits", repo_id=repo_id, error=str(e))
+            return []
+        
+    async def get_repository_stats(self, repo_id: int) -> Dict[str, Any]:
+        #get repository statistics
+        try:
+            #commit count
+            commits_response = (
+                self.client.table('commits')
+                .select('id', count='exact')
+                .eq('repository_id', repo_id)
+                .execute()
+            )
+            
+            # embedding count
+            embeddings_response = (
+                self.client.table('embeddings')
+                .select('id', count='exact')
+                .eq('commit_id', 'in', f"(SELECT id FROM commits WHERE repository_id = {repo_id})")
+                .execute()
+            )
+            
+            total_commits = commits_response.count or 0
+            total_embeddings = embeddings_response.count or 0
+            
+            return {
+                "total_commits": total_commits,
+                "total_embeddings": total_embeddings,
+                "embedding_progress": total_embeddings / total_commits if total_commits > 0 else 0.0,
+                "last_updated": datetime.utcnow().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error("error getting repository stats", repo_id=repo_id, error=str(e))
+            return {} 
     
     
 
