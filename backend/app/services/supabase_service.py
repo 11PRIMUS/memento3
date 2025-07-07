@@ -78,6 +78,60 @@ class SupabaseService:
             logger.error("error updating repository", repo_id=repo_id, error=str(e))
             return False
         
+    async def store_commits(self, repo_id: int, commits: List[Commit]) -> List[Commit]:
+        #store commit in batch
+        try:
+            commit_data = []
+            for commit in commits:
+                commit_data.append({
+                    "repository_id": repo_id,
+                    "sha": commit.sha,
+                    "message": commit.message,
+                    "author": commit.author,
+                    "author_email": commit.author_email,
+                    "commit_date": commit.commit_date.isoformat(),
+                    "additions": commit.additions,
+                    "deletions": commit.deletions,
+                    "files_changed": commit.files_changed,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                })
+        
+            stored_commits = []
+            batch_size = 100
+            
+            for i in range(0, len(commit_data), batch_size):
+                batch = commit_data[i:i + batch_size]
+                response = self.client.table('commits').insert(batch).execute()
+                
+                if response.data:
+                    stored_commits.extend([Commit(**commit) for commit in response.data])
+                    logger.debug("Stored commit batch", batch_num=i//batch_size + 1, count=len(response.data))
+            
+            logger.info("Commits stored successfully", repo_id=repo_id, total=len(stored_commits))
+            return stored_commits
+            
+        except Exception as e:
+            logger.error("Error storing commits", repo_id=repo_id, error=str(e))
+            raise
+
+    async def get_commits(self, repo_id: int, limit: int = 100, offset: int = 0) -> List[Commit]:
+        #get commit with pagination
+        try:
+            response = (
+                self.client.table('commits')
+                .select('*')
+                .eq('repository_id', repo_id)
+                .order('commit_date', desc=True)
+                .range(offset, offset + limit - 1)
+                .execute()
+            )
+            
+            return [Commit(**commit) for commit in response.data]
+            
+        except Exception as e:
+            logger.error("Error fetching commits", repo_id=repo_id, error=str(e))
+            return []
     
     
 
