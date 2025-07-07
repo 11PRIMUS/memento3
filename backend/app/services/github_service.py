@@ -150,3 +150,25 @@ class Github_service:
         except Exception as e:
             logger.error("error processing commit", sha= sha[:8], error=str(e))
             return None
+
+    async def get_commitDiff(self, repo_url: str, sha: str) -> Optional[str]:
+        """Get diff content for a specific commit"""
+        owner, repo = self.parse_github_url(repo_url)
+        
+        logger.debug("Fetching commit diff", owner=owner, repo=repo, sha=sha[:8])
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{self.base_url}/repos/{owner}/{repo}/commits/{sha}",
+                headers={
+                    **self.headers,
+                    "Accept": "application/vnd.github.v3.diff"
+                }
+            )
+            
+            if response.status_code == 200:
+                return response.text
+            else:
+                logger.error("failed to fetch commit diff", sha=sha[:8], 
+                           status_code=response.status_code)
+                return None
