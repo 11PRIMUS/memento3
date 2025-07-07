@@ -135,17 +135,16 @@ class Github_service:
             data = response.json()
 
             return Commit(
-                sha =sha,
+                sha=sha,
                 message=data["commit"]["message"],
-                author =data["commit"]["author"]["name"],
-                author_email =data["commit"]["author"]["email"],
-                commit_date =datetime.fromisoformat(
-                    data["commit"]["author"]["date"].replace("Z", "+00:00") 
+                author=data["commit"]["author"]["name"],
+                author_email=data["commit"]["author"]["email"],
+                commit_date=datetime.fromisoformat(
+                    data["commit"]["author"]["date"].replace("Z", "+00:00")
                 ),
-                additions=data["stats"]["additions"]
-                deletions=data["stats"]["deletions"]
+                additions=data["stats"]["additions"],
+                deletions=data["stats"]["deletions"],
                 files_changed=[file["filename"] for file in data.get("files", [])]
-
             )
         except Exception as e:
             logger.error("error processing commit", sha= sha[:8], error=str(e))
