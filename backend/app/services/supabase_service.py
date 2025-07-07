@@ -32,6 +32,32 @@ class SupabaseService:
         except Exception as e:
             logger.erro("error creating repository", error=str(e))
             raise
+
+    async def get_repoURL(self, url:str)->Optional[Repo]:
+        # get repo by url
+        try:
+            response = self.client.table('repositories').select('*').eq('url',str(url)).execute()
+
+            if response.data:
+                return Repo(**response.data[0])
+            
+            return None
+        except Exception as e:
+            logger.error("error fetching repostiory by url" ,error=str(e))
+            return None
+        
+    async def get_repo(self, repo_id:int)-> Optional[Repo]:
+        # get repository bu id
+        try:
+            response = self.client.table('repositories').select('*').eq('id', repo_id).execute()
+            
+            if response.data:
+                return Repo(**response.data[0])
+            return None
+            
+        except Exception as e:
+            logger.error("Error fetching repository", repo_id=repo_id, error=str(e))
+            return None
     
-    
+
 
