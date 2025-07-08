@@ -40,3 +40,48 @@ class EmbeddingService:
         
         logger.debug("Generated embeddings", count=len(texts), dimension=embeddings.shape[1])
         return embeddings
+    
+    async def embed_commit_message(self, commit: Commit) -> Embeddings:
+        #create embedding for commit message
+        text_content = f"{commit.message} {' '.join(commit.files_changed[:5])}"
+        
+        embeddings = await self.create_embeddings([text_content])
+        
+        return Embeddings(
+            commit_id=commit.id,
+            embedding_vector=embeddings[0].tolist(),
+            model_name=self.model_name,
+            text_content=text_content,
+            embedding_type="commit_message"
+        )
+    
+    async def embed_commitBatch(self, commits: List[Commit]) -> List[Embeddings]:
+        #create embeddings for multiple commits
+        if not commits:
+            return []
+        
+        logger.info("Creating embeddings for commit batch", count=len(commits))
+        
+        texts = []
+        for commit in commits:
+            text_content = f"{commit.message} {' '.join(commit.files_changed[:5])}"
+            texts.append(text_content)
+        
+        embeddings_array = await self.create_embeddings(texts)
+        
+        #embedding objects
+        embeddings = []
+        for i, commit in enumerate(commits):
+            embedding = Embeddings(
+                commit_id=commit.id,
+                embedding_vector=embeddings_array[i].tolist(),
+                model_name=self.model_name,
+                text_content=texts[i],
+                embedding_type="commit_message"
+            )
+            embeddings.append(embedding)
+        
+        logger.info("embeddings created successfully", count=len(embeddings))
+        return embeddings
+    
+    
