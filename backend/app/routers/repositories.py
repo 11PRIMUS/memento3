@@ -112,3 +112,21 @@ async def list_repositories(
         logger.error("error listing repo", error=str(e))
         raise HTTPException(status_code=500, detail="internal server error")
     
+@router.get("/{repo_id}",response_model=RepoResponse)
+async def get_repo(
+    repo_id: int,
+    service: SupabaseService= Depends(get_supabaseService)
+
+):
+    #get repo by id
+    try:
+        repository=await service.get_repo(repo_id)
+        if not repository:
+            raise HTTPException(status_code=404, detail="repo not found")
+        logger.info("repo retireived", repo_id=repo_id)
+        return RepoResponse(**repository.model_dump())
+    
+    except Exception as e:
+        logger.errp("error fetching repo",repo_id=repo_id, error=str(e))
+        raise HTTPException(status_code=500, detail="internal server error")
+    
