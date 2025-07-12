@@ -237,3 +237,27 @@ async def reindex_repo(
     except Exception as e:
         logger.error("error starting reindex", repo_id=repo_id, error=str(e))
         raise HTTPException(status_code=500, detail="internal server error")
+    
+@router.delete("/{repo_id}")
+async def delete_repo(
+    repo_id:int,
+    service: SupabaseService=Depends(get_supabaseService),
+    embedding_service: EmbeddingService=Depends(get_embeddingService)
+):
+    try:
+        repository = await service.get_repo(repo_id)
+        if not repository:
+            raise HTTPException(status_code=404, detail="repo not found")
+        await embedding_service.delete_repoEmbeddings(repo_id)
+        success = await service.delete_repo(repo_id)
+
+        if success:
+            logger.info("repository delted successfully")
+            return {"message":"repository deleted successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="failed to delete repository")
+        
+    except Exception as e:
+        logger.error("error deleting repository",repo_id=repo_id, error=str(e))
+        raise HTTPException(status_code=500, detail="internal server error")
+    
