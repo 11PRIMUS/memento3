@@ -192,4 +192,157 @@ ANALYSIS:"""
             technical_score * 0.1
         )
         
-        return min(max(confidence, 0.0), 1.0)     
+        return min(max(confidence, 0.0), 1.0)    
+    async def commit_summar(self, commits:List[EmbeddingResult])-> str:
+        if not commits:
+            return " no commits availabe for summary"
+        try:
+            context=self.commit_context(commits)
+            prompt= f"""You are MementoAI, analyzing repository commit history. Generate a concise summary of the development activity shown in these commits:
+
+{context}
+
+Provide a summary that covers:
+1. Main development themes and focus areas
+2. Key contributors and their contributions
+3. Types of changes (features, fixes, refactoring, etc.)
+4. Code quality and architectural trends
+5. Overall development velocity and patterns
+
+Keep the summary informative but concise (3-5 paragraphs).
+
+SUMMARY:"""
+            response= await self.generate_retry(prompt)
+            logger.info("commit summary generated", commit_count=len(commits))
+            return response
+            
+        except Exception as e:
+            logger.error("failed to generate commit summary", error=str(e))
+            return f"Unable to generate summary: {str(e)}"
+    
+    async def code_quality(self, commits: List[EmbeddingResult]) -> Dict[str, Any]:
+        if not commits:
+            return {"error": "No commits available for analysis"}
+        
+        try:
+            context = self.commit_context(commits)
+            
+            prompt = f"""Analyze the code quality trends from these commits:
+
+{context}
+
+Provide analysis in the following categories:
+1. Technical debt indicators
+2. Refactoring patterns
+3. Code complexity changes
+4. Security improvements
+5. Performance optimizations
+6. Testing coverage changes
+
+Respond in a structured format with specific examples from the commits.
+
+QUALITY ANALYSIS:"""
+            
+            response = await self.generate_retry(prompt)
+            
+            return {
+                "analysis": response,
+                "commit_count": len(commits),
+                "generated_at": datetime.now(timezone.utc).isoformat()
+            }
+        except Exception as e:
+            logger.error("Failed to analyze code quality", error=str(e))
+            return {"error": f"Analysis failed: {str(e)}"}
+    
+    async def follow_up_ques(self, question: str, analysis: str, 
+                                        commits: List[EmbeddingResult]) -> List[str]:
+        try:
+            prompt = f"""Based on this repository analysis, suggest 3-5 relevant follow-up questions that would provide deeper insights:
+
+Original Question: "{question}"
+
+Analysis Result: "{analysis[:500]}..."
+
+Commits Analyzed: {len(commits)} commits
+
+Generate specific, actionable follow-up questions that would help understand:
+- Code evolution patterns
+- Development practices
+- Technical decisions
+- Architecture changes
+- Quality improvements
+
+SUGGESTED QUESTIONS:"""
+            response = await self.generate_retry(prompt)
+            
+            #line parsing
+            questions = []
+            for line in response.split('\n'):
+                line = line.strip()
+                if line and (line.startswith('-') or line.startswith('•') or 
+                           line.startswith('1.') or line.startswith('2.') or 
+                           line.startswith('3.') or line.startswith('4.') or 
+                           line.startswith('5.')):
+                    question_text = line.lstrip('-•123456789. ').strip()
+                    if question_text and question_text.endswith('?'):
+                        questions.append(question_text)
+            
+            return questions[:5]
+            
+        except Exception as e:
+            logger.error("failed to generate follow-up questions", error=str(e))
+            return []
+    
+    def test_connection(self) -> bool:
+        try:
+            test_response = self.model.generate_content("Test connection. Respond with 'OK'.")
+            return bool(test_response.text and 'OK' in test_response.text)
+        except Exception as e:
+            logger.error("AI service connection test failed", error=str(e))
+            return False
+    
+    def get_model_info(self) -> Dict[str, Any]:
+        return {
+            "model_name": self.model_name,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "provider": "Google Gemini",
+            "capabilities": [
+                "commit_analysis",
+                "code_quality_assessment", 
+                "pattern_recognition",
+                "technical_recommendations",
+                "development_insights"
+            ]
+        }
+    async def explain_changes(self, commit: EmbeddingResult, 
+                                   diff_content: Optional[str] = None) -> str:
+        try:
+            commit_info = f"""
+Commit: {commit.sha}
+Author: {commit.author}
+Date: {commit.commit_date}
+Message: {commit.message}
+Changes: +{commit.additions} -{commit.deletions}
+Files: {', '.join(commit.files_changed[:10])}
+"""
+            
+            prompt = f"""Explain the technical significance of this commit:
+
+{commit_info}
+
+{"Diff content:\n" + diff_content[:2000] + "..." if diff_content else ""}
+
+Provide a technical explanation covering:
+1. What changes were made
+2. Why these changes might have been necessary
+3. Potential impact on the codebase
+4. Code quality implications
+
+TECHNICAL EXPLANATION:"""
+            response = await self.generate_retry(prompt)
+            return response
+            
+        except Exception as e:
+            logger.error("failed to explain commit changes", commit_sha=commit.sha, error=str(e))
+            return f"unable to explain commit changes: {str(e)}"
