@@ -11,7 +11,7 @@ from app.schemas.commit import CommitResponse, CommitList
 from app.models.repo import RepoStatus
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime,timezone
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -129,4 +129,85 @@ async def get_repo(
     except Exception as e:
         logger.errp("error fetching repo",repo_id=repo_id, error=str(e))
         raise HTTPException(status_code=500, detail="internal server error")
-    
+
+@router.get("/{repo_id}/stats", response_model=RepoStats)
+async def get_repoStats(
+    repo_id:int,
+    service: SupabaseService=Depends(get_supabaseService),
+    embedding_service: EmbeddingService=Depends(get_embeddingService)
+):
+    #get repo statistics
+    try:
+        repository=await service.get_repo(repo_id)
+        if not repository:
+            raise HTTPException(status_code=404, detail="Repository not found")
+        
+        stats = await embedding_service.get_embedding_stats(repo_id)
+        
+        logger.info("repository stats retrieved", repo_id=repo_id)
+        return RepoStats(
+            repository_id=repo_id,
+            total_commits=stats.get("total_commits", 0),
+            recent_commits=0,  #  need separate query
+            embedding_progress=stats.get("embedding_progress", 0.0),
+            last_updated=datetime.now(timezone.utc)
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error fetching repository stats", repo_id=repo_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
+        
+@router.get("/{repo_id}/commits",response_model=CommitList)
+async def get_commits(
+    repo_id: int,
+    page: int=Query(1, ge=1,description="page number"),
+    per_page: int=Query(50, ge=1, le=100, description="items per page"),
+    service:SupabaseService=Depends(get_supabaseService)
+
+):
+    #get commits of repo
+    try:
+        repository = await service.get_repo(repo_id)
+        if not repository:
+            raise HTTPException(status_code=404, detail="Repository not found")
+        
+        offset = (page - 1) * per_page
+        commits = await service.get_commits(repo_id, limit=per_page + 1, offset=offset)
+
+        has_next = len(commits) > per_page
+        if has_next:
+            commits = commits[:-1]
+        
+        commit_responses = []
+        for commit in commits:
+            commit_responses.append(CommitResponse(
+                id=commit.id,
+                sha=commit.sha,
+                message=commit.message,
+                author=commit.author,
+                author_email=commit.author_email,
+                commit_date=commit.commit_date,
+                additions=commit.additions,
+                deletions=commit.deletions,
+                files_changed=commit.files_changed,
+                has_embedding=commit.embedding_id is not None
+            ))
+        total = offset + len(commits) + (1 if has_next else 0)
+        
+        logger.info("repository commits retrieved", repo_id=repo_id, count=len(commits))
+        
+        return CommitList(
+            commits=commit_responses,
+            total=total,
+            page=page,
+            per_page=per_page,
+            has_next=has_next
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error fetching repository commits", repo_id=repo_id, error=str(e))
+        raise 
