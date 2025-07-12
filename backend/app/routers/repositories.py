@@ -28,8 +28,10 @@ def get_embeddingService(client: Client=Depends(get_supabase))->EmbeddingService
 @router.post("/", response_model=RepoResponse)
 async def create_repository(
     repo_data: RepoCreate,
+    background_tasks: BackgroundTasks,
     supabase_service: SupabaseService = Depends(get_supabaseService),
     github_service: Github_service = Depends(get_githubService)
+
 
 ):
     try:
@@ -45,7 +47,7 @@ async def create_repository(
         
         #get repo info from github
         try:
-            repo_info = await github_service.get_repository_info(str(repo_data.url))
+            repo_info = await github_service.get_repoInfo(str(repo_data.url))
         except ValueError as e:
             logger.error("Invalid repository URL", url=str(repo_data.url), error=str(e))
             raise HTTPException(status_code=400, detail=str(e))
@@ -53,7 +55,7 @@ async def create_repository(
             logger.error("failed to fetch repo",url=str(repo_data.url),error=str(e))
             raise HTTPException (status_code=500, detail=f"failed to fetch repo info:{str(e)}")
         
-        repo_record = await supabase_service.create_repository({
+        repo_record = await supabase_service.create_repo({
             "name": repo_info["name"],
             "url": str(repo_data.url),
             "owner": repo_info["owner"],
@@ -66,7 +68,7 @@ async def create_repository(
             "status": RepoStatus.PENDING.value
         })
         background_tasks.add_task(
-            process_repository_commits,
+            process_repoCommits,
             repo_record.id,
             str(repo_data.url),
             repo_data.max_commits or 100,
@@ -75,13 +77,13 @@ async def create_repository(
         )
         
         logger.info("Repository created successfully", repo_id=repo_record.id)
-        return RepoResponse(**repo_record.dict())
+        return RepoResponse(**repo_record.model_dump())
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error("Error creating repository", error=str(e))
-        raise HTTPException(status_code=500, detail="intenal server error")
+        raise HTTPException(status_code=500, detail="internal server error")
     
 @router.get("/", response_model=RepoList)
 async def list_repositories(
@@ -102,7 +104,7 @@ async def list_repositories(
         logger.info("Listed repositories", page=page, count=len(repositories))
         
         return RepoList(
-            repositories=[RepoResponse(**repo.dict()) for repo in repositories],
+            repositories=[RepoResponse(**repo.model_dump()) for repo in repositories],
             total=total,
             page=page,
             per_page=per_page,
@@ -127,7 +129,7 @@ async def get_repo(
         return RepoResponse(**repository.model_dump())
     
     except Exception as e:
-        logger.errp("error fetching repo",repo_id=repo_id, error=str(e))
+        logger.error("error fetching repo",repo_id=repo_id, error=str(e))
         raise HTTPException(status_code=500, detail="internal server error")
 
 @router.get("/{repo_id}/stats", response_model=RepoStats)
@@ -225,7 +227,7 @@ async def reindex_repo(
         if not repository:
             raise HTTPException(status_code=404, detail="repository not found")
         background_tasks.add_task(
-            reindex_repo,
+            reindex_repoEmbedding,
             repo_id,
             embedding_service
         )
@@ -252,7 +254,7 @@ async def delete_repo(
         success = await service.delete_repo(repo_id)
 
         if success:
-            logger.info("repository delted successfully")
+            logger.info("repository deleted successfully")
             return {"message":"repository deleted successfully"}
         else:
             raise HTTPException(status_code=500, detail="failed to delete repository")
@@ -261,3 +263,49 @@ async def delete_repo(
         logger.error("error deleting repository",repo_id=repo_id, error=str(e))
         raise HTTPException(status_code=500, detail="internal server error")
     
+async def process_repoCommits(repo_id: int, repo_url: str, max_commits: int, 
+                                   supabase_service: SupabaseService, 
+                                   github_service: Github_service):
+    try:
+        logger.info("starting repository processing", repo_id=repo_id)
+        await supabase_service.update_repoStatus(repo_id, RepoStatus.INDEXING)
+        #get commit from github
+        commits = await github_service.get_commits(repo_url, max_commits)
+        
+        if commits:
+            #stores commit in db
+            stored_commits = await supabase_service.store_commits(repo_id, commits)
+            
+            #update repository with commit count
+            await supabase_service.update_repoStatus(
+                repo_id,
+                RepoStatus.COMPLETED,
+                total_commits=len(stored_commits),
+                indexed_commits=len(stored_commits),
+                last_analyzed_at=datetime.now(timezone.utc).isoformat()
+            )
+            
+            logger.info("repository processing completed", repo_id=repo_id, 
+                       commit_count=len(stored_commits))
+        else:
+            await supabase_service.update_repoStatus(repo_id, RepoStatus.ERROR)
+            logger.warning("no commits found", repo_id=repo_id)
+
+    except Exception as e:
+        logger.error("error processing repository",repo_id=repo_id, error=str(e))
+        await supabase_service.update_repoStatus(repo_id, RepoStatus.ERROR)
+
+async def reindex_repoEmbedding(repo_id: int, embedding_service: EmbeddingService):
+    try:
+        logger.info("starting embedding reindex", repo_id=repo_id)
+        #delete existing embeddings
+        await embedding_service.delete_repoEmbeddings(repo_id)
+        success=await embedding_service.index_repoCommits(repo_id)
+
+        if success:
+           logger.info("embedding reindex completed", repo_id=repo_id)
+        else:
+            logger.error("embedding reindex failed", repo_id=repo_id)
+            
+    except Exception as e:
+        logger.error("error reindexing embeddings",repo_id=repo_id, error=str(e)) 
