@@ -3,7 +3,7 @@ from supabase import Client
 from app.core.logging import get_logger
 from app.services.supabase_service import SupabaseService
 from app.services.github_service import Github_service
-from app.services.embedding_service import EmbeddingService
+from app.services.embedding_service import EmbeddingService, EmbeddingResult, Embeddings
 from app.schemas.repo import (
     RepoCreate, RepoResponse, RepoList, RepoStats
 )
@@ -93,7 +93,7 @@ async def list_repositories(
 ):
     try:
         offset =(page-1) * per_page
-        repositories =await service.list_repositories(limit=per_page + 1, offset=offset)
+        repositories =await service.list_repo(limit=per_page + 1, offset=offset)
         
         has_next = len(repositories) > per_page
         if has_next:
@@ -299,8 +299,8 @@ async def reindex_repoEmbedding(repo_id: int, embedding_service: EmbeddingServic
     try:
         logger.info("starting embedding reindex", repo_id=repo_id)
         #delete existing embeddings
-        await embedding_service.delete_repoEmbeddings(repo_id)
-        success=await embedding_service.index_repoCommits(repo_id)
+        await embedding_service.delete_repository_embeddings(repo_id)
+        success=await embedding_service.index_repoCommmits(repo_id)
 
         if success:
            logger.info("embedding reindex completed", repo_id=repo_id)
