@@ -210,4 +210,30 @@ async def get_commits(
         raise
     except Exception as e:
         logger.error("Error fetching repository commits", repo_id=repo_id, error=str(e))
-        raise 
+        raise HTTPException(status_code=500, detail="internal server error")
+
+@router.post("/{repo_id}/reindex")
+async def reindex_repo(
+    repo_id: int,
+    background_tasks: BackgroundTasks,
+    service: SupabaseService=Depends(get_supabaseService),
+    embedding_service: EmbeddingService=Depends(get_embeddingService)
+
+):
+    try:
+        repository= await service.get_repo(repo_id)
+        if not repository:
+            raise HTTPException(status_code=404, detail="repository not found")
+        background_tasks.add_task(
+            reindex_repo,
+            repo_id,
+            embedding_service
+        )
+        logger.info("repository reindexing started",repo_id=repo_id)
+        return {"message":"reindexing started","repo_id": repo_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("error starting reindex", repo_id=repo_id, error=str(e))
+        raise HTTPException(status_code=500, detail="internal server error")
