@@ -162,6 +162,54 @@ async def get_repo_summary(
     except Exception as e:
         logger.error("error generating repository summary",repo_id=repo_id, error=str(e))
         raise HTTPException(status_code=500,detail="Failed to generate summary")
+    
+@router.get("/search")
+async def search_commit(
+    repo_id: int = Query(..., description="repository ID"),
+    query: str = Query(..., min_length=1, description="search query"),
+    limit: int = Query(10, ge=1, le=50, description="Number of results"),
+    threshold: float = Query(0.7, ge=0.0, le=1.0, description="Similarity threshold"),
+    supabase_service: SupabaseService = Depends(get_supabaseService),
+    embedding_service: EmbeddingService = Depends(get_embeddingService)
+):
+
+    try:
+        repository = await supabase_service.get_repo(repo_id)
+        if not repository:
+            raise HTTPException(status_code=404,detail="Repository not found")
+        
+        similar_commits =await embedding_service.similar_commits(
+            query=query,
+            repo_id=repo_id,
+            limit=limit,
+            threshold=threshold
+        )
+        results = []
+        for commit in similar_commits:
+            results.append({
+                "sha": commit.sha,
+                "message": commit.message,
+                "author": commit.author,
+                "commit_date": commit.commit_date.isoformat(),
+                "similarity_score": commit.similarity_score,
+                "files_changed": commit.files_changed
+            })
+        
+        logger.info("Commit search completed", repo_id=repo_id, 
+                   query_length=len(query), results_count=len(results))
+        
+        return {
+            "query": query,
+            "repository_id": repo_id,
+            "results": results,
+            "total_results": len(results)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error searching commits", repo_id=repo_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Search failed")
 
 async def store_analysis_session(supabase_serice: SupabaseService, analysis: AnalysisResponse)-> None:
     try:
