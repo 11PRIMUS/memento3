@@ -227,6 +227,23 @@ class SupabaseService:
             logger.error("error getting repository stats", repo_id=repo_id, error=str(e))
             return {} 
     
+    async def get_global(self)-> Dict[str, Any]:
+        try:
+            repos_response=self.client.table('repositories').select('id', count='exact').execute()
+            commits_response=self.client.table('commits').select('id', count='exact').execute()
+            embeddings_response=self.client.table('embedings').select('id',count='exact').execute()
+
+            return{
+                "total_repositories": repos_response.count or 0,
+                "total_commits": commits_response.count or 0,
+                "total_embeddings":embeddings_response.count or 0,
+                "last_updated":datetime.now(timezone.utc).isoformat()
+            }
+            
+        except Exception as e:
+            logger.error("Error getting global stats", error=str(e))
+            return {}
+            
     
 
 
