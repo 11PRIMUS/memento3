@@ -171,3 +171,49 @@ class Github_service:
                 logger.error("failed to fetch commit diff", sha=sha[:8], 
                            status_code=response.status_code)
                 return None
+        
+    async def get_rateLimit(self)-> Dict:
+            #ratelimit status for github
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"{self.base_url}/rate_limit",
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error("failed to fetch rate limit", status_code=response.status_code)
+                return {}
+            
+    async def search_repo(self, query: str, limit: int = 10) -> List[Dict]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response =await client.get(
+                f"{self.base_url}/search/repositories",
+                headers=self.headers,
+                params={
+                    "q":query,
+                    "sort": "stars",
+                    "order":"desc",
+                    "per_page": limit
+                }
+            )
+            
+            if response.status_code ==200:
+                data =response.json()
+                return data.get("items", [])
+            else:
+                logger.error("Repository search failed", status_code=response.status_code)
+                return []
+    
+    def test_connection(self) -> bool: #github api connection test
+        try:
+            import asyncio
+            async def _test():
+                rate_limit =await self.get_rate_limit()
+                return bool(rate_limit.get("rate"))
+            
+            return asyncio.run(_test())
+        except Exception as e:
+            logger.error("GitHub service test failed", error=str(e))
+            return False
