@@ -84,4 +84,31 @@ async def analyze_repo(
     except Exception as e:
         logger.error("Error in analysis", repo_id=request.repository_id, error=str(e))
         raise HTTPException(status_code=500, detail="analysis failed")
+
+@router.get("/repository/{repo_id}/history",response_model=AnalysisHistoryList)
+async def get_analysis_history(
+    repo_id: int,
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(20, ge=1, le=50, description="Items per page"),
+    supabase_service: SupabaseService = Depends(get_supabaseSerive)
+
+):
+    try:
+        repository= await supabase_service.get_repo(repo_id)
+        if not repository:
+            raise HTTPException(status_code=404,detail="repo not found")
+        logger.info("retrieved analysis history",repo_id=repo_id)
+    
+        return AnalysisHistoryList(
+            analyses=[],
+            total=0,
+            page=page,
+            per_page=per_page,
+            has_next=False
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("error fetching analysis history", repo_id=repo_id, error=str(e))
+        raise HTTPException(status_code=500, detail="failed to fetch analysis history")
     
