@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 logger=get_logger(__name__)
 
-class AISerive:
+class AIService:
     def __init__(self):
         self.model_name=settings.GEMINI_MODEL
         self.max_tokens=settings.MAX_TOKENS
