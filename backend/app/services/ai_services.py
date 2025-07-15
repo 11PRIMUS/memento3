@@ -324,14 +324,12 @@ Author: {commit.author}
 Date: {commit.commit_date}
 Message: {commit.message}
 Changes: +{commit.additions} -{commit.deletions}
-Files: {', '.join(commit.files_changed[:10])}
-"""
-            
+Files: {', '.join(commit.files_changed[:10])}"""
             prompt = f"""Explain the technical significance of this commit:
 
 {commit_info}
 
-{"Diff content:\n" + diff_content[:2000] + "..." if diff_content else ""}
+{"Diff content:" + diff_content[:2000] + "..." if diff_content else ""}
 
 Provide a technical explanation covering:
 1. What changes were made
@@ -339,7 +337,9 @@ Provide a technical explanation covering:
 3. Potential impact on the codebase
 4. Code quality implications
 
-TECHNICAL EXPLANATION:"""
+TECHNICAL EXPLANATION:
+"""
+
             response = await self.generate_retry(prompt)
             return response
             
