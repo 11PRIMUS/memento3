@@ -18,7 +18,11 @@ class Settings(BaseSettings):
 
     #github api's
     GITHUB_TOKEN:Optional[str] =None
-    GITHUB_API_KEY :str
+    
+    GEMINI_API_KEY: str
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+    MAX_TOKENS: int=1000
+    TEMPERATURE: float =0.7
     
     #embedding model
     EMBEDDING_MODEL: str ="sentence-transformers/all-MiniLM-L6-v2"

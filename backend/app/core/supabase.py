@@ -2,6 +2,8 @@ from supabase import create_client, Client
 from app.core.config import settings
 from typing import Optional
 from app.core.logging import get_logger
+from functools import lru_cache
+
 
 logger = get_logger(__name__)
 
