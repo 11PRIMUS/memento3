@@ -109,7 +109,7 @@ async def health_check():
             "type": "Google Gemini"
         }
     
-    service_statuses = [service["status"] for service in health_status["services"].values()]
+    service_statuses = [service["status"] for service in health_check["services"].values()]
     if "error" in service_statuses:
         health_check["status"] ="degraded"
     elif "disconnected" in service_statuses:
