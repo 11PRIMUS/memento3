@@ -1,4 +1,5 @@
-from app.core.logging import logging
+from app.core.logging import get_logger
+from app.core.supabase import get_supabase
 from app.models.repo import Repo, RepoStatus
 from app.models.commit import Commit, CommitDiff
 from app.models.embedding import Embeddings
@@ -6,7 +7,7 @@ from supabase import Client
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class SupabaseService:
     def __init__(self, client: Client):
@@ -21,7 +22,7 @@ class SupabaseService:
                 "created_at":datetime.now(timezone.utc).isoformat(),
                 "updated_at":datetime.now(timezone.utc).isoformat()
             }
-            response =self.client.table('repostories').insert(insert_data).execute()
+            response =self.client.table('repositories').insert(insert_data).execute()
 
             if response.data:
                 logger.info("repository created", repo_id = response.data[0]['id'])
@@ -30,7 +31,7 @@ class SupabaseService:
                 raise Exception("failed to create repository")
             
         except Exception as e:
-            logger.erro("error creating repository", error=str(e))
+            logger.error("error creating repository", error=str(e))
             raise
 
     async def get_repoURL(self, url:str)->Optional[Repo]:
@@ -77,6 +78,13 @@ class SupabaseService:
         except Exception as e:
             logger.error("error updating repository", repo_id=repo_id, error=str(e))
             return False
+    
+    async def list_repo(self):
+        try:
+            response=self.client.table("repositories").select("*").execute()
+            return response.data
+        except Exception as e:
+            raise Exception(f"error fetching repositories: {str(e)}")
         
     async def store_commits(self, repo_id: int, commits: List[Commit]) -> List[Commit]:
         #store commit in batch
@@ -220,7 +228,7 @@ class SupabaseService:
                 "total_commits": total_commits,
                 "total_embeddings": total_embeddings,
                 "embedding_progress": total_embeddings / total_commits if total_commits > 0 else 0.0,
-                "last_updated": datetime.utcnow().isoformat()
+                "last_updated": datetime.now(timezone.utc).isoformat()
             }
             
         except Exception as e:
@@ -231,7 +239,7 @@ class SupabaseService:
         try:
             repos_response=self.client.table('repositories').select('id', count='exact').execute()
             commits_response=self.client.table('commits').select('id', count='exact').execute()
-            embeddings_response=self.client.table('embedings').select('id',count='exact').execute()
+            embeddings_response=self.client.table('embeddings').select('id',count='exact').execute()
 
             return{
                 "total_repositories": repos_response.count or 0,
