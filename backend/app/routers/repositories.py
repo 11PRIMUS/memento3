@@ -90,7 +90,16 @@ async def list_repositories(
 ):
     try:
         offset =(page-1) * per_page
-        repositories =await service.list_repo(limit=per_page + 1, offset=offset)
+        all_repositories=await service.list_repo()
+        total =len(all_repositories)
+        start_idx= offset
+        end_idx =offset + per_page
+        repositories= all_repositories[start_idx:end_idx]
+        
+        has_next = end_idx < total
+        
+        logger.info("listed repositories",page=page, count=len(repositories))
+
         
         has_next = len(repositories) > per_page
         if has_next:
@@ -100,8 +109,21 @@ async def list_repositories(
         
         logger.info("Listed repositories", page=page, count=len(repositories))
         
+        repo_responses = []
+        for repo in repositories:
+
+            repo_dict=repo.model_dump() if hasattr(repo, 'model_dump') else repo.__dict__
+            repo_dict.setdefault('default_branch', 'main')
+            repo_dict.setdefault('github_id', None)
+            repo_dict.setdefault('stars', 0)
+            repo_dict.setdefault('forks', 0)
+            repo_dict.setdefault('total_commits', 0)
+            repo_dict.setdefault('indexed_commits', 0)
+            
+            repo_responses.append(RepoResponse(**repo_dict))
+        
         return RepoList(
-            repositories=[RepoResponse(**repo.model_dump()) for repo in repositories],
+            repositories=repo_responses,
             total=total,
             page=page,
             per_page=per_page,

@@ -12,23 +12,48 @@ class RepoResponse(BaseModel):
     name: str
     url: str
     owner: str
-    description: Optional[str]
-    default_branch: str
+    description: Optional[str]= None
+    default_branch: Optional[str]="main"
     
     # GitHub metadata
-    github_id: Optional[int]
+    github_id: Optional[int]=None
     stars: int
     forks: int
-    language: Optional[str]
+    language: Optional[str]= None
     
     # Analysis metadata
     status: str
     total_commits: int
     indexed_commits: int
-    last_analyzed_at: Optional[datetime]
+    last_analyzed_at: Optional[datetime]=None
     
     created_at: datetime
     updated_at: datetime
+
+class Config:
+    from_attributes=True
+
+@classmethod
+def from_repository(cls, repo):
+    return cls(
+        id=repo.id,
+        name=repo.name,
+        url=repo.url,
+        owner=repo.owner,
+        description=repo.description,
+        default_branch=repo.default_branch or "main",  # Provide default
+        github_id=repo.github_id,                      # Can be None
+        stars=repo.stars or 0,
+        forks=repo.forks or 0,
+        language=repo.language,
+        status=repo.status,
+        total_commits=repo.total_commits or 0,
+        indexed_commits=repo.indexed_commits or 0,
+        last_analyzed_at=repo.last_analyzed_at,
+        created_at=repo.created_at,
+        updated_at=repo.updated_at   
+
+    )
 
 class RepoList(BaseModel):
     repositories: List[RepoResponse]

@@ -79,12 +79,28 @@ class SupabaseService:
             logger.error("error updating repository", repo_id=repo_id, error=str(e))
             return False
     
-    async def list_repo(self):
+    async def list_repo(self, limit:int=None, offset:int=0)-> List[Repo]:
         try:
-            response=self.client.table("repositories").select("*").execute()
-            return response.data
+            query = self.client.table("repositories").select("*")
+        
+            if limit:
+                query = query.limit(limit)
+            if offset:
+                query = query.offset(offset)
+            
+            query = query.order('created_at', desc=True)
+            response = query.execute()
+            repositories = []
+            if response.data:
+                for repo_data in response.data:
+                    repositories.append(Repo(**repo_data))
+        
+            return repositories
+        
         except Exception as e:
+            logger.error("error fetching repositories", error=str(e))
             raise Exception(f"error fetching repositories: {str(e)}")
+        
         
     async def store_commits(self, repo_id: int, commits: List[Commit]) -> List[Commit]:
         #store commit in batch
