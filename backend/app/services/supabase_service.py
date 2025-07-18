@@ -172,6 +172,11 @@ class SupabaseService:
             )
             
             if response.data:
+                commit_data=response.data[0]
+                if isinstance(commit_data.get('commit_date'),str):
+                              commit_data['commit_date'] = datetime.fromisoformat(
+                    commit_data['commit_date'].replace('Z', '+00:00')
+                )
                 return Commit(**response.data[0])
             return None
             
@@ -202,7 +207,23 @@ class SupabaseService:
         except Exception as e:
             logger.error("Error storing embedding", commit_id=embedding.commit_id, error=str(e))
             raise
-
+    
+    async def update_commit_embedding(self, commit_id: int, embedding_id: int) -> bool:
+        try:
+            response = self.client.table('commits').update({
+                "embedding_id": embedding_id,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }).eq('id', commit_id).execute()
+            
+            if response.data:
+                logger.debug("Commit updated with embedding", commit_id=commit_id, embedding_id=embedding_id)
+                return True
+            return False
+            
+        except Exception as e:
+            logger.error("Error updating commit embedding", commit_id=commit_id, error=str(e))
+            return False
+        
     async def search_similarCommits(self, query_embedding: List[float], repo_id: int, 
                                    limit: int = 10, threshold: float = 0.7) -> List[Dict]:
         #search for similar commits using vector 
@@ -220,6 +241,7 @@ class SupabaseService:
         except Exception as e:
             logger.error("Error searching similar commits", repo_id=repo_id, error=str(e))
             return []
+    
         
     async def get_repository_stats(self, repo_id: int) -> Dict[str, Any]:
         #get repository statistics
@@ -233,16 +255,19 @@ class SupabaseService:
             )
             
             # embedding count
-            embeddings_response = (
-                self.client.table('embeddings')
-                .select('id', count='exact')
-                .eq('commit_id', 'in', f"(SELECT id FROM commits WHERE repository_id = {repo_id})")
+            commits_with_embeddings = (
+                self.client.table('commits')
+                .select('embedding_id',count='exact')
+                .eq('repository_id',repo_id)
+                .not_.is_('embedding_id','null')
                 .execute()
+
             )
-            
+           
             total_commits = commits_response.count or 0
-            total_embeddings = embeddings_response.count or 0
-            
+            total_embeddings = commits_with_embeddings.count or 0
+
+
             return {
                 "total_commits": total_commits,
                 "total_embeddings": total_embeddings,
@@ -253,6 +278,7 @@ class SupabaseService:
         except Exception as e:
             logger.error("error getting repository stats", repo_id=repo_id, error=str(e))
             return {} 
+    
     
     async def get_global(self)-> Dict[str, Any]:
         try:
