@@ -110,12 +110,26 @@ class SupabaseService:
             
             for i in range(0, len(commit_data), batch_size):
                 batch = commit_data[i:i + batch_size]
-                response = self.client.table('commits').insert(batch).execute()
+                try:
+                    response = self.client.table('commits').insert(batch).execute()
                 
-                if response.data:
-                    stored_commits.extend([Commit(**commit) for commit in response.data])
-                    logger.debug("Stored commit batch", batch_num=i//batch_size + 1, count=len(response.data))
-            
+                    if response.data:
+                        for commit_item in response.data:
+                            if isinstance(commit_item.get('commit_date'),str):
+                                commit_item['commit_date']=datetime.fromisoformat(
+                                    commit_item['commit_date'].replace('Z','+00:00')
+                                )
+                            stored_commits.append(Commit(**commit_item))
+                        logger.debug("Stored commit batch", batch_num=i//batch_size + 1, count=len(response.data))
+                
+                except Exception as batch_error:
+                    if "duplicate" in str(batch_error).lower() or "unique" in str(batch_error).lower():
+                        logger.debug("skipping duplicate commits")
+                        continue
+                    else:
+                        raise batch_error
+                
+
             logger.info("Commits stored successfully", repo_id=repo_id, total=len(stored_commits))
             return stored_commits
             
@@ -134,8 +148,13 @@ class SupabaseService:
                 .range(offset, offset + limit - 1)
                 .execute()
             )
-            
-            return [Commit(**commit) for commit in response.data]
+            commits=[]
+            for commit_data in response.data:
+                if isinstance(commit_data.get('commit_date'),str):
+                    commit_data['commit_date']=datetime.fromisoformat(commit_data['commit_date'].replace('Z','+00:00'))
+                commits.append(Commit(**commit_data))
+
+            return commits
             
         except Exception as e:
             logger.error("Error fetching commits", repo_id=repo_id, error=str(e))

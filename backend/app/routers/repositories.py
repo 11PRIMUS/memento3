@@ -8,7 +8,7 @@ from app.schemas.repo import (
     RepoCreate, RepoResponse, RepoList, RepoStats
 )
 from app.schemas.commit import CommitResponse, CommitList
-from app.models.repo import RepoStatus
+from app.models.repo import RepoStatus, Repo
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from typing import Optional, List
 from datetime import datetime,timezone
@@ -37,13 +37,10 @@ async def create_repository(
     try:
         logger.info("creating repository", url=str(repo_data.url))
 
-        existing_repo = await supabase_service.get_repository_by_url(str(repo_data.url))
+        existing_repo = await supabase_service.get_repoURL(str(repo_data.url))
         if existing_repo:
             logger.warning("Repository already exists", url=str(repo_data.url))
-            raise HTTPException(
-                status_code=400,
-                detail="Repository already exists"
-            )
+            return RepoResponse(**existing_repo.model_dump())
         
         #get repo info from github
         try:
