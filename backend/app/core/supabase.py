@@ -1,4 +1,4 @@
-from supabase import create_client, SupabaseClient
+from supabase import create_client,Client
 from app.core.config import settings
 from typing import Optional
 from app.core.logging import get_logger
@@ -9,7 +9,7 @@ logger = get_logger(__name__)
 
 class SupabaseManager:
     _instance: Optional['SupabaseManager'] = None
-    _client: Optional[SupabaseClient] = None
+    _client: Optional[Client] = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -29,8 +29,8 @@ class SupabaseManager:
                 raise ValueError("Supabase key is required")
 
             self._client = create_client(
-                settings.SUPABASE_URL,
-                settings.SUPABASE_KEY
+                supabase_url=settings.SUPABASE_URL,
+                supabase_key=settings.SUPABASE_KEY
             )
 
             logger.info("Supabase client initialized successfully")
@@ -40,7 +40,7 @@ class SupabaseManager:
             raise
 
     @classmethod
-    def get_client(cls) -> SupabaseClient:
+    def get_client(cls) -> Client:
         instance = cls()
         if instance._client is None:
             raise Exception("Supabase client not initialized")
@@ -60,7 +60,7 @@ class SupabaseManager:
 
 
 @lru_cache()
-def get_supabase() -> SupabaseClient:
+def get_supabase() ->Client:
     """FastAPI dependency to get Supabase client"""
     return SupabaseManager.get_client()
 
@@ -94,7 +94,7 @@ class SupabaseHealthCheck:
                 "tables_accessible": False
             }
 
-# The DATABASE_SCHEMA remains unchanged
+
 DATABASE_SCHEMA = """ ... """
 
 async def initialize_database():

@@ -5,8 +5,12 @@ python-dotenv==1.0.0
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
-supabase==2.3.4
+
+supabase==2.16.0
+supafunc==0.10.1
 structlog==23.2.0
-httpx==0.25.2
-sentence-transformers==2.2.2
+
+httpx==0.28.1
+sentence-transformers==5.0.0
 numpy==1.24.3
+google-generativeai==0.3.2
