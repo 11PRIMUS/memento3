@@ -3,5 +3,10 @@ venv
 .env
 .DS_Store
 __pychache__/
+backend/app/core/__pycache__
+backend/app/models/__pycache__
+backend/app/routers/__pycache__
+backend/app/schemas/__pycache__
+backend/app/services/__pycache__
 n.txt
 backend/app/__pycache__

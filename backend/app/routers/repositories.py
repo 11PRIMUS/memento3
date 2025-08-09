@@ -12,6 +12,7 @@ from app.models.repo import RepoStatus, Repo
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from typing import Optional, List
 from datetime import datetime,timezone
+import asyncio
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -72,8 +73,7 @@ async def create_repository(
             process_repoCommits,
             repo_record.id,
             str(repo_data.url),
-            repo_data.max_commits or 100,
-            
+            repo_data.max_commits or 100
         )
         
         logger.info("Repository created successfully", repo_id=repo_record.id)
@@ -268,6 +268,41 @@ async def reindex_repo(
         logger.error("error starting reindex", repo_id=repo_id, error=str(e))
         raise HTTPException(status_code=500, detail="internal server error")
     
+@router.post("/{repo_id}/debug-process")
+async def debug_process_repository(
+    repo_id: int,
+    background_tasks: BackgroundTasks,
+    service: SupabaseService = Depends(get_supabaseService)
+):
+    """Debug endpoint to manually trigger repository processing"""
+    try:
+        repository = await service.get_repo(repo_id)
+        if not repository:
+            raise HTTPException(status_code=404, detail="Repository not found")
+        
+        logger.info("Manually triggering repository processing", repo_id=repo_id)
+        
+        # Add background task
+        background_tasks.add_task(
+            process_repoCommits,
+            repo_id,
+            repository.url,
+            100  # max_commits
+        )
+        
+        return {
+            "message": "Processing started",
+            "repo_id": repo_id,
+            "url": repository.url,
+            "current_status": repository.status
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error starting debug processing", repo_id=repo_id, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to start processing")
+
 @router.delete("/{repo_id}")
 async def delete_repo(
     repo_id:int,
@@ -292,24 +327,32 @@ async def delete_repo(
         raise HTTPException(status_code=500, detail="internal server error")
     
 async def process_repoCommits(repo_id: int, repo_url: str, max_commits: int):
-    from app.core.supabase import get_supabase_client
-
-    supabase_client= get_supabase_client() #new service instance , prev crashed
-    supabase_service=SupabaseService(supabase_client)
-    github_service=Github_service()
-
+    """Background task to process repository commits"""
     try:
-        logger.info("starting repository processing", repo_id=repo_id)
-        await supabase_service.update_repoStatus(repo_id, RepoStatus.INDEXING)
-        #get commit from github repo
-        commits=[]
-        retry_count=0
-        max_retries=3
+        # Import here to avoid circular imports in background tasks
+        from app.core.config import settings
+        from app.core.supabase import get_supabase
+        
+        # Create new service instances for background task
+        supabase_client = get_supabase()
+        supabase_service = SupabaseService(supabase_client)
+        github_service = Github_service()
 
-        while retry_count <max_retries and not commits:
+        logger.info("Starting repository processing", repo_id=repo_id, url=repo_url, max_commits=max_commits)
+        
+        # Update status to indexing
+        await supabase_service.update_repoStatus(repo_id, RepoStatus.INDEXING)
+        logger.info("Repository status updated to INDEXING", repo_id=repo_id)
+        
+        # Get commits from GitHub repo with retry logic
+        commits = []
+        retry_count = 0
+        max_retries = 3
+
+        while retry_count < max_retries and not commits:
             try:
-                logger.info(f"fetching commits(attempt{retry_count +1})",repo_id=repo_id, repo_url=repo_url)
-                commits=await github_service.get_commits(repo_url, max_commits)
+                logger.info(f"Fetching commits (attempt {retry_count + 1})", repo_id=repo_id, repo_url=repo_url)
+                commits = await github_service.get_commits(repo_url, max_commits)
 
                 if commits:
                     logger.info("Commits fetched successfully", repo_id=repo_id, commit_count=len(commits))
@@ -325,15 +368,13 @@ async def process_repoCommits(repo_id: int, repo_url: str, max_commits: int):
                     await asyncio.sleep(2 ** retry_count)  # Exponential backoff
                 else:
                     raise e
-        
 
-        #commits = await github_service.get_commits(repo_url, max_commits)
-        
         if commits:
-            #stores commit in db
+            # Store commits in database
+            logger.info("Storing commits in database", repo_id=repo_id, commit_count=len(commits))
             stored_commits = await supabase_service.store_commits(repo_id, commits)
             
-            #update repository with commit count
+            # Update repository with commit count
             if stored_commits:
                 await supabase_service.update_repoStatus(
                     repo_id,
@@ -341,13 +382,13 @@ async def process_repoCommits(repo_id: int, repo_url: str, max_commits: int):
                     total_commits=len(stored_commits),
                     indexed_commits=len(stored_commits),
                     last_analyzed_at=datetime.now(timezone.utc).isoformat()
-            )
-            
-                logger.info("repository processing completed", repo_id=repo_id, 
-                       commit_count=len(stored_commits))
+                )
+                
+                logger.info("Repository processing completed successfully", repo_id=repo_id, 
+                           commit_count=len(stored_commits))
             else:
                 await supabase_service.update_repoStatus(repo_id, RepoStatus.ERROR)
-                logger.warning("no commits found", repo_id=repo_id)
+                logger.error("Failed to store commits in database", repo_id=repo_id)
 
         else:
             logger.warning("No commits found for repository", repo_id=repo_id)
@@ -360,8 +401,16 @@ async def process_repoCommits(repo_id: int, repo_url: str, max_commits: int):
             )
 
     except Exception as e:
-        logger.error("error processing repository",repo_id=repo_id, error=str(e))
-        await supabase_service.update_repoStatus(repo_id, RepoStatus.ERROR)
+        logger.error("Error processing repository", repo_id=repo_id, error=str(e), exc_info=True)
+        try:
+            # Try to update status to error, but don't fail if this also fails
+            from app.core.supabase import get_supabase
+            supabase_client = get_supabase()
+            supabase_service = SupabaseService(supabase_client)
+            await supabase_service.update_repoStatus(repo_id, RepoStatus.ERROR)
+        except Exception as update_error:
+            logger.error("Failed to update repository status to ERROR", 
+                        repo_id=repo_id, error=str(update_error))
 
 async def reindex_repoEmbedding(repo_id: int, embedding_service: EmbeddingService):
     try:
