@@ -4,7 +4,7 @@ from app.models.repo import Repo, RepoStatus
 from app.models.commit import Commit, CommitDiff
 from app.models.embedding import Embeddings
 from supabase import Client
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Union, Any
 from datetime import datetime, timezone
 
 logger = get_logger(__name__)
@@ -102,24 +102,49 @@ class SupabaseService:
             raise Exception(f"error fetching repositories: {str(e)}")
         
         
-    async def store_commits(self, repo_id: int, commits: List[Commit]) -> List[Commit]:
+    async def store_commits(self, repo_id: int, commits: List[Union[Dict, Commit]]) -> List[Commit]:
         #store commit in batch
         try:
             commit_data = []
             for commit in commits:
-                commit_data.append({
-                    "repository_id": repo_id,
-                    "sha": commit.sha,
-                    "message": commit.message,
-                    "author": commit.author,
-                    "author_email": commit.author_email,
-                    "commit_date": commit.commit_date.isoformat(),
-                    "additions": commit.additions,
-                    "deletions": commit.deletions,
-                    "files_changed": commit.files_changed,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat()
-                })
+                # Handle both dict and Commit object inputs
+                if isinstance(commit, dict):
+                    commit_date = commit["commit_date"]
+                    if isinstance(commit_date, datetime):
+                        commit_date = commit_date.isoformat()
+                    elif isinstance(commit_date, str):
+                        # Ensure proper datetime format
+                        if commit_date.endswith('Z'):
+                            commit_date = commit_date.replace('Z', '+00:00')
+                    
+                    commit_data.append({
+                        "repository_id": repo_id,
+                        "sha": commit["sha"],
+                        "message": commit["message"],
+                        "author": commit["author"],
+                        "author_email": commit.get("author_email"),
+                        "commit_date": commit_date,
+                        "additions": commit.get("additions", 0),
+                        "deletions": commit.get("deletions", 0),
+                        "files_changed": commit.get("files_changed", []),
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    })
+                else:
+                    # Handle Commit object
+                    commit_data.append({
+                        "repository_id": repo_id,
+                        "sha": commit.sha,
+                        "message": commit.message,
+                        "author": commit.author,
+                        "author_email": commit.author_email,
+                        "commit_date": commit.commit_date.isoformat(),
+                        "additions": commit.additions,
+                        "deletions": commit.deletions,
+                        "files_changed": commit.files_changed,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    })
         
             stored_commits = []
             batch_size = 100

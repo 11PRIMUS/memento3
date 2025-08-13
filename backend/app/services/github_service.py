@@ -21,7 +21,7 @@ class Github_service:
             logger.info("github service intialized")
 
         else:
-            logger.warnigs("github service initialized (limited rate)")
+            logger.warning("github service initialized (limited rate)")
     
     def github_url(self, url: str)-> Tuple[str,str]:
         parsed =urlparse(str(url))
@@ -73,7 +73,7 @@ class Github_service:
                 "is_private": data.get("private", False)
             }
     
-    async def get_commits(self, repo_url: str, max_commits: int =100)-> List[Commit]:
+    async def get_commits(self, repo_url: str, max_commits: int =100)-> List[Dict]:
         #fetch commit history from github
         owner, repo =self.github_url(repo_url)
 
@@ -109,7 +109,7 @@ class Github_service:
                     if len(commits) >= max_commits:
                         break
                     
-                    commit_detail = await self._get_commit_details(client, owner, repo, commit_data["sha"])
+                    commit_detail = await self.get_commitDetails(client, owner, repo, commit_data["sha"])
                     if commit_detail:
                         commits.append(commit_detail)
                 
@@ -121,7 +121,7 @@ class Github_service:
         logger.info("commit fetch completed", owner=owner, repo=repo, total_commits=len(commits))
         return commits
     
-    async def get_commitDetails(self, client:httpx.AsyncClient, owner: str, repo: str, sha: str)-> Optional[Commit]:
+    async def get_commitDetails(self, client:httpx.AsyncClient, owner: str, repo: str, sha: str)-> Optional[Dict]:
         #detailed commit information
         try:
             response = await client.get(
@@ -129,23 +129,23 @@ class Github_service:
                 headers= self.headers
             )
             if response.status_code!= 200:
-                logger.warnig("failed to fetch commit details", sha= sha[:8])
+                logger.warning("failed to fetch commit details", sha= sha[:8])
                 return None
             
             data = response.json()
 
-            return Commit(
-                sha=sha,
-                message=data["commit"]["message"],
-                author=data["commit"]["author"]["name"],
-                author_email=data["commit"]["author"]["email"],
-                commit_date=datetime.fromisoformat(
+            return {
+                "sha": sha,
+                "message": data["commit"]["message"],
+                "author": data["commit"]["author"]["name"],
+                "author_email": data["commit"]["author"]["email"],
+                "commit_date": datetime.fromisoformat(
                     data["commit"]["author"]["date"].replace("Z", "+00:00")
                 ),
-                additions=data["stats"]["additions"],
-                deletions=data["stats"]["deletions"],
-                files_changed=[file["filename"] for file in data.get("files", [])]
-            )
+                "additions": data["stats"]["additions"],
+                "deletions": data["stats"]["deletions"],
+                "files_changed": [file["filename"] for file in data.get("files", [])]
+            }
         except Exception as e:
             logger.error("error processing commit", sha= sha[:8], error=str(e))
             return None
